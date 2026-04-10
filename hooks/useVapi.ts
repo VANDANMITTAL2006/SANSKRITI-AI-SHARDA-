@@ -333,7 +333,7 @@ ${currentLang === 'hi' ? 'CRITICAL: Respond entirely in Hindi. All facts, myths,
       return
     }
 
-    const vapi = new Vapi(publicKey)
+    const vapi = new Vapi(publicKey!)
     vapiRef.current = vapi
 
     // ── EVENT LISTENERS ──────────────────────────────────
