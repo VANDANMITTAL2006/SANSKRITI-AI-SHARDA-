@@ -1,0 +1,92 @@
+'use client'
+import { createContext, useContext, useState, useEffect, ReactNode } from 'react'
+
+type UserType = 'student' | 'tourist' | null
+
+interface UserConfig {
+  label: string
+  subtitle: string
+  color: string
+  border: string
+  bg: string
+  chatbot_persona: string
+  content_focus: string[]
+  recommended_duration: string
+  icon: string
+}
+
+const USER_TYPES: Record<string, UserConfig> = {
+  student: {
+    label: '🎓 Student',
+    subtitle: 'Curriculum-aligned learning with quizzes & XP',
+    color: '#4B9B8E',
+    border: 'rgba(75, 155, 142, 0.5)',
+    bg: 'rgba(75, 155, 142, 0.08)',
+    chatbot_persona: 'You are an educational heritage guide for students. Use simple language, explain historical dates and rulers clearly, mention architectural terms with definitions, connect facts to school curriculum. End responses with a quiz hint or interesting fact to remember.',
+    content_focus: ['Historical dates & rulers', 'Architectural features', 'Cultural significance', 'Quiz-ready facts'],
+    recommended_duration: '20–30 min per monument',
+    icon: '🎓',
+  },
+  tourist: {
+    label: '🧳 Tourist',
+    subtitle: 'Story-driven exploration with photography & culture tips',
+    color: '#D4893F',
+    border: 'rgba(212, 137, 63, 0.5)',
+    bg: 'rgba(212, 137, 63, 0.08)',
+    chatbot_persona: 'You are a warm, storytelling heritage guide for tourists visiting India. Use vivid, conversational language. Share legends, local myths, photography tips, best spots, nearby food, and cultural experiences. Make the visitor feel the magic.',
+    content_focus: ['Stories & legends', 'Photography spots', 'Cultural experiences', 'Local tips & food'],
+    recommended_duration: '1–2 hours per monument',
+    icon: '🧳',
+  },
+}
+
+interface UserContextType {
+  userType: UserType
+  userConfig: UserConfig | null
+  setUserType: (type: UserType) => void
+  isSelected: boolean
+}
+
+const UserContext = createContext<UserContextType>({
+  userType: null,
+  userConfig: null,
+  setUserType: () => {},
+  isSelected: false,
+})
+
+export function UserProvider({ children }: { children: ReactNode }) {
+  const [userType, setUserTypeState] = useState<UserType>(null)
+  const [isSelected, setIsSelected] = useState(false)
+
+  useEffect(() => {
+    const saved = localStorage.getItem('sanskriti_user_type')
+    const savedSelected = localStorage.getItem('sanskriti_user_selected')
+    if (saved && savedSelected === 'true') {
+      setUserTypeState(saved as UserType)
+      setIsSelected(true)
+    }
+  }, [])
+
+  const setUserType = (type: UserType) => {
+    setUserTypeState(type)
+    setIsSelected(true)
+    if (type) {
+      localStorage.setItem('sanskriti_user_type', type)
+      localStorage.setItem('sanskriti_user_selected', 'true')
+    }
+  }
+
+  const userConfig = userType ? USER_TYPES[userType] : null
+
+  return (
+    <UserContext.Provider value={{ userType, userConfig, setUserType, isSelected }}>
+      {children}
+    </UserContext.Provider>
+  )
+}
+
+export function useUser() {
+  return useContext(UserContext)
+}
+
+export { USER_TYPES }

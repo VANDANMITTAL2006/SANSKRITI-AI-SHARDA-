@@ -1,0 +1,976 @@
+"use client"
+
+import { useState, useEffect, useRef, useCallback } from "react"
+import dynamic from "next/dynamic"
+import { useRouter } from "next/navigation"
+import { AppShell } from "@/components/app-shell"
+import { useAuth } from "@/lib/authContext"
+import { addXP, computeAndSaveBadges } from "@/lib/authClient"
+import { useVapi } from "@/hooks/useVapi"
+import { useLang } from "@/lib/languageContext"
+
+import { ChevronDown } from "lucide-react"
+import { getMonument, saveMonument } from "@/lib/monumentStore"
+
+/* eslint-disable @typescript-eslint/no-explicit-any */
+
+const MONUMENT_NAMES: Record<string, string> = {
+  'taj-mahal': 'Taj Mahal', 'red-fort': 'Red Fort', 'qutub-minar': 'Qutub Minar',
+  'gateway-india': 'Gateway of India', 'hampi': 'Hampi', 'golden-temple': 'Golden Temple Amritsar',
+  'kedarnath': 'Kedarnath Temple', 'meenakshi': 'Meenakshi Amman Temple', 'mysore-palace': 'Mysore Palace',
+  'hawa-mahal': 'Hawa Mahal Jaipur', 'charminar': 'Charminar Hyderabad', 'victoria-memorial': 'Victoria Memorial Kolkata',
+  'ajanta': 'Ajanta Caves', 'konark': 'Konark Sun Temple', 'india-gate': 'India Gate Delhi',
+}
+
+// ── TAJ MAHAL ZONES ──────────────────────────────────────
+const TAJ_ZONES = [
+  {
+    id: 1, name: "Main Gate (Darwaza-i-Rauza)", emoji: "🚪",
+    lat: 27.17390, lng: 78.04215, radius: 50, xp: 50,
+    arrival_fact: "You are standing at the Great Gate of the Taj Mahal, built entirely from red sandstone. This magnificent gateway stands 30 metres tall and is inscribed with verses from the Quran in black marble. As you pass through this gate, the Taj Mahal is revealed in perfect symmetry — exactly as Shah Jahan intended. The gate was designed to frame the entire mausoleum in a single breathtaking view.",
+    direction_hint: "You are near the entrance of Taj Mahal complex. Walk straight ahead toward the large red sandstone archway.",
+    mini_fact: "The gate has 11 small domed kiosks on top called chhatris.",
+    local_belief: "It is said Shah Jahan designed the gateway so that the Taj Mahal is completely hidden until you take the very last step through the arch - the sudden reveal was intentional, meant to feel like the doors of paradise opening. Workers who built the gate reportedly wept when they first saw what they had been building toward."
+  },
+  {
+    id: 2, name: "Reflecting Pool Center", emoji: "🌊",
+    lat: 27.17420, lng: 78.04215, radius: 45, xp: 75,
+    arrival_fact: "You are standing at the Hauz-i-Kausar — the Pool of Abundance. This rectangular reflecting pool stretches 162 metres long and perfectly mirrors the Taj Mahal in its waters. Shah Jahan believed water symbolized paradise in Islamic tradition. On a clear morning, you can see two Taj Mahals — one in the sky and one in the water below. Every photograph you have ever seen of the Taj Mahal was likely taken from exactly where you are standing.",
+    direction_hint: "From the Main Gate, walk straight ahead about 100 metres. You will see a long rectangular pool stretching toward the Taj Mahal.",
+    mini_fact: "The pool was designed so the Taj Mahal appears at its center when viewed from this exact spot.",
+    local_belief: "Guides at the Taj have repeated for generations that the pool was built not for beauty but for protection - if you look directly at the marble under the midday sun, the reflected light can temporarily blind you. The pool gives visitors a way to see the Taj without ever having to look at it directly. Whether true or not, the architects of the Mughal empire were known to design consequences into beauty."
+  },
+  {
+    id: 3, name: "Whispering Gallery", emoji: "🔊",
+    lat: 27.17510, lng: 78.04215, radius: 40, xp: 100,
+    arrival_fact: "You have entered the main mausoleum chamber — the Whispering Gallery of the Taj Mahal. The inner dome rises 24 metres above you. Due to the perfect acoustic design, even the softest whisper travels along the curved walls and can be heard clearly on the opposite side. Shah Jahan's architects designed this intentionally — so that prayers for Mumtaz Mahal would echo eternally within these walls. At the center lie the cenotaphs of Mumtaz Mahal and Shah Jahan, surrounded by a screen of carved marble so fine it looks like lace.",
+    direction_hint: "Walk past the reflecting pool and climb the marble plinth steps. Enter the main white marble mausoleum through the central arch.",
+    mini_fact: "The actual tombs of Shah Jahan and Mumtaz are in a crypt directly below the cenotaphs."
+  },
+  {
+    id: 4, name: "River Terrace (Yamuna View)", emoji: "🌅",
+    lat: 27.17545, lng: 78.04215, radius: 45, xp: 125,
+    arrival_fact: "You are standing on the River Terrace at the back of the Taj Mahal, overlooking the sacred Yamuna river. This is the most peaceful and least visited spot in the entire complex. Shah Jahan spent his final years imprisoned in Agra Fort across this very river, gazing at the Taj Mahal from a distance — never allowed to visit the tomb he built for his beloved wife. On full moon nights, the Taj Mahal glows silver from this terrace. You are standing where emperors once stood to grieve.",
+    direction_hint: "Walk around to the back of the main mausoleum. Follow the marble pathway to the northern terrace overlooking the Yamuna river.",
+    mini_fact: "Shah Jahan originally planned a black marble Taj Mahal for himself across the river, connected by a silver bridge."
+  },
+  {
+    id: 5, name: "Great Gate (Darwaza-i-Rauza)", emoji: "🕌",
+    lat: 27.17492, lng: 78.04212, radius: 42, xp: 150,
+    arrival_fact: "You are at the Great Gate, the 30-metre red sandstone portal that frames the sacred axis of the Taj complex. Its Quranic inscriptions were scaled with visual precision so they read clearly from below. The gateway hides the mausoleum until the final step through the arch, turning arrival into a theatrical reveal.",
+    direction_hint: "Stand along the southern edge and face the central archway. Walk forward until the mausoleum appears fully framed.",
+    mini_fact: "Calligraphy near the top is physically larger, so it appears uniform from ground level."
+  },
+  {
+    id: 6, name: "Outer Courtyard (Jilaukhana)", emoji: "🏛️",
+    lat: 27.17496, lng: 78.04196, radius: 42, xp: 175,
+    arrival_fact: "You are in the Jilaukhana, the forecourt where caravans, officials, and mourners gathered before entering the main garden. This transitional precinct organized movement, ceremony, and security at imperial scale. Tombs associated with Mumtaz's attendants stand nearby, embedding memory into the entry sequence.",
+    direction_hint: "Move through the southern forecourt lanes before approaching the monumental gate.",
+    mini_fact: "The forecourt acted as a social and ceremonial buffer before the sacred core."
+  },
+  {
+    id: 7, name: "Hauz-i-Kausar (Central Tank)", emoji: "💧",
+    lat: 27.17502, lng: 78.04218, radius: 42, xp: 200,
+    arrival_fact: "You are by the raised Hauz-i-Kausar tank, fed by a channel symbolically called the River of Paradise. Its reflective surface was designed to hold a complete mirrored image of the Taj. Water, geometry, and sky are combined here as one architectural instrument.",
+    direction_hint: "Walk along the central axis and stop where the marble tank aligns with the mausoleum.",
+    mini_fact: "The tank's positioning was optimized for full frontal reflection."
+  },
+  {
+    id: 8, name: "West Mosque", emoji: "🕋",
+    lat: 27.17518, lng: 78.04186, radius: 40, xp: 225,
+    arrival_fact: "You are at the western mosque, built in red sandstone and used for Friday prayers. Its position on the west aligns with ritual orientation. The matching eastern structure exists as a jawab, created to preserve absolute visual symmetry.",
+    direction_hint: "Head toward the western side of the plinth to the active prayer structure.",
+    mini_fact: "Only the west building functions as a mosque; the east counterpart is architectural balance."
+  },
+  {
+    id: 9, name: "Jawab (Echo Building)", emoji: "🪞",
+    lat: 27.17518, lng: 78.04236, radius: 40, xp: 250,
+    arrival_fact: "You are at the jawab, the mirror building opposite the mosque. It was built to complete the composition, not for congregational worship. Its orientation intentionally does not face Mecca, confirming its role as a symmetrical counterpart.",
+    direction_hint: "Cross to the eastern side opposite the mosque and compare both facades.",
+    mini_fact: "The jawab is one of the clearest examples of symmetry prioritized over function."
+  },
+  {
+    id: 10, name: "Main Plinth (Chowk-i-Jilo Khana)", emoji: "⬜",
+    lat: 27.17522, lng: 78.04210, radius: 40, xp: 275,
+    arrival_fact: "You are on the elevated marble plinth that carries the mausoleum and its four minarets. Below this platform are hollow chambers historically linked to storage and service circulation. The plinth separates sacred architecture from the garden plane with deliberate monumental height.",
+    direction_hint: "Climb the marble steps and stand on the raised platform beneath the main structure.",
+    mini_fact: "The platform amplifies both flood protection and visual dominance."
+  },
+  {
+    id: 11, name: "Minarets Base", emoji: "🗼",
+    lat: 27.17528, lng: 78.04226, radius: 38, xp: 300,
+    arrival_fact: "You are at the base of one of the four minarets that frame the Taj. Each tower was engineered with a subtle outward tilt. This precaution meant a collapse would fall away from the mausoleum instead of onto it.",
+    direction_hint: "Move to a corner of the main marble plinth and look up along the minaret shaft.",
+    mini_fact: "The minarets are both ceremonial markers and structural risk-management by design.",
+    local_belief: "The four minarets lean slightly outward - not from age or settling, but by design. Builders and guides still repeat the story: if any minaret ever fell, it would fall away from the tomb, never onto it. Whether Shah Jahan commanded this or the architects decided alone, no one knows."
+  },
+  {
+    id: 12, name: "Inner Dome Chamber", emoji: "🕯️",
+    lat: 27.17524, lng: 78.04214, radius: 38, xp: 325,
+    arrival_fact: "You are inside the chamber beneath the iconic double dome system. The outer dome seen from outside is a shell above, while the inner dome sits significantly lower, creating dramatic height and controlled acoustics. This layered geometry shapes the whispering resonance visitors still hear.",
+    direction_hint: "Enter the main chamber and look upward from beneath the central vault.",
+    mini_fact: "The inner and outer domes are separated to control scale, temperature, and sound."
+  },
+  {
+    id: 13, name: "Mumtaz Mahal's Cenotaph", emoji: "🌸",
+    lat: 27.17526, lng: 78.04212, radius: 36, xp: 350,
+    arrival_fact: "You are at Mumtaz Mahal's cenotaph, the ornamental tomb at the symbolic heart of the chamber. The actual sarcophagus lies in the lower crypt below. The cenotaph here is ceremonial, crafted for memory, devotion, and imperial artistry.",
+    direction_hint: "Approach the center of the chamber near the marble screen enclosure.",
+    mini_fact: "The visible cenotaph is not the burial chamber; the real interment is beneath it.",
+    local_belief: "Local legend holds that Shah Jahan wept so much after Mumtaz died that his hair turned white in a single year. He is said to have visited her cenotaph every Friday without exception for the 22 years it took to build the Taj - starting from the day the foundation was laid, before there was anything to see."
+  },
+  {
+    id: 14, name: "Shah Jahan's Cenotaph", emoji: "👑",
+    lat: 27.17527, lng: 78.04216, radius: 36, xp: 375,
+    arrival_fact: "You are at Shah Jahan's cenotaph, placed beside Mumtaz after his death. Its offset position introduces the only major asymmetry inside the mausoleum. What began as a perfectly centered single memorial became a dual resting composition.",
+    direction_hint: "Stand beside the paired cenotaph arrangement and note the slight displacement from center.",
+    mini_fact: "Shah Jahan's addition is the principal asymmetrical element in the complex.",
+    local_belief: "Locals believe the asymmetry of Shah Jahan's tomb - the only imperfect element in the entire complex - was deliberate. He had always planned to build a twin Taj in black marble across the Yamuna for himself. When his son Aurangzeb imprisoned him, that dream died, and his tomb was placed beside Mumtaz's as an afterthought, forever breaking the symmetry he had spent a lifetime perfecting."
+  },
+  {
+    id: 15, name: "Pietra Dura Inlay Panels", emoji: "💎",
+    lat: 27.17514, lng: 78.04224, radius: 38, xp: 400,
+    arrival_fact: "You are viewing the pietra dura floral inlay panels carved into white marble. Artisans assembled these motifs from precious and semi-precious stones sourced across Asia. Many individual flowers are mosaics of dozens of carefully cut pieces.",
+    direction_hint: "Trace the lower wall panels and look closely at the floral stonework.",
+    mini_fact: "Some motifs combine 50 to 60 stone fragments in a single flower composition."
+  },
+  {
+    id: 16, name: "Calligraphy Bands", emoji: "✒️",
+    lat: 27.17512, lng: 78.04204, radius: 38, xp: 425,
+    arrival_fact: "You are beneath the grand iwan where Quranic calligraphy bands frame the arches. The script was intentionally scaled larger at higher levels to appear equal in size from the ground. This is an early and brilliant use of optical correction in architecture.",
+    direction_hint: "Step back from the facade and follow the black marble inscriptions around the arch.",
+    mini_fact: "The lettering grows with height so the human eye reads it as uniform."
+  },
+  {
+    id: 17, name: "Moonlight Garden (Mahtab Bagh)", emoji: "🌙",
+    lat: 27.17556, lng: 78.04220, radius: 44, xp: 450,
+    arrival_fact: "You are aligned with Mahtab Bagh, the moonlight garden across the Yamuna to the north. It served as a designed viewing platform where the Taj could be seen with water reflections under full moon light. This northern vantage extended the monument's visual theater beyond its walls.",
+    direction_hint: "Move to the northern edge and face across the river toward the aligned garden axis.",
+    mini_fact: "Mahtab Bagh completes the Taj's larger riverfront planning geometry.",
+    local_belief: "This garden across the river was where Shah Jahan sat during the last years of his imprisonment, staring at the Taj Mahal from a distance - close enough to see it, forbidden to cross. His daughter Jahanara sat beside him. When he died, Aurangzeb moved his body to the Taj at night. Some say his final request was simply to be buried next to her."
+  },
+  {
+    id: 18, name: "River Yamuna Embankment", emoji: "🌊",
+    lat: 27.17558, lng: 78.04200, radius: 44, xp: 475,
+    arrival_fact: "You are at the rear riverfront embankment where the Yamuna runs behind the mausoleum terrace. The river edge was integrated into the site strategy, helping define defense and approach conditions from the north. This boundary also gave the Taj its famous mirrored relationship with water and sky.",
+    direction_hint: "Walk to the northern terrace edge and look directly down toward the riverfront line.",
+    mini_fact: "The north edge was planned so hostile approach from the river side remained difficult."
+  },
+  {
+    id: 19, name: "Artisan's Quarter Ruins", emoji: "🧱",
+    lat: 27.17552, lng: 78.04258, radius: 44, xp: 500,
+    arrival_fact: "You are at the remains linked to the artisan service quarter east of the main complex. During construction, thousands of craftsmen and laborers were housed in support zones around the project. Much of this built infrastructure was later dismantled after completion.",
+    direction_hint: "Head toward the eastern side beyond the core garden axis to the peripheral ruins zone.",
+    mini_fact: "Historical accounts associate this area with the workforce settlement that supported construction."
+  }
+]
+
+// ── RED FORT ZONES ──────────────────────────────────────
+const RED_FORT_ZONES = [
+  {
+    id: 11, name: "Lahori Gate", emoji: "🚪",
+    lat: 28.6558, lng: 77.2386, radius: 50, xp: 50,
+    arrival_fact: "You are standing at the Lahori Gate, the main entrance to the Red Fort. Its name comes from its orientation towards the city of Lahore. Every Independence Day, the Prime Minister hoists the national flag from here.",
+    direction_hint: "Walk straight towards the massive red sandstone gate.",
+    mini_fact: "Aurangzeb added the barbican (outer wall) to make it more secure."
+  },
+  {
+    id: 12, name: "Chatta Chowk", emoji: "🛍️",
+    lat: 28.6559, lng: 77.2393, radius: 45, xp: 75,
+    arrival_fact: "You have arrived at Chatta Chowk, the covered bazaar. Inspired by markets in Peshawar, Shah Jahan built this so the royal household could shop for silk, jewelry, and other exotic items without leaving the fort.",
+    direction_hint: "Pass through Lahori gate into the arched corridor lined with shops.",
+    mini_fact: "This is one of the very few covered markets from Mughal India."
+  },
+  {
+    id: 13, name: "Diwan-i-Am", emoji: "👑",
+    lat: 28.6561, lng: 77.2415, radius: 45, xp: 100,
+    arrival_fact: "This is the Diwan-i-Am, the Hall of Public Audience. Emperor Shah Jahan sat on the ornate marble canopy (jharokha) to hear the grievances of commoners, separated by silver railings.",
+    direction_hint: "Walk past the Naubat Khana to the large pillared red sandstone hall.",
+    mini_fact: "The hall originally had ivory-colored polish that looked like white marble."
+  },
+  {
+    id: 14, name: "Diwan-i-Khas", emoji: "💎",
+    lat: 28.6565, lng: 77.2428, radius: 50, xp: 125,
+    arrival_fact: "Welcome to the Diwan-i-Khas, the Hall of Private Audience. Here the Emperor met with VIPs. It once housed the legendary solid gold Peacock Throne, studded with precious gems including the Koh-i-Noor diamond.",
+    direction_hint: "Head further east towards the intricately carved white marble pavilion.",
+    mini_fact: "The Persian inscription here reads: 'If there is a paradise on earth, it is this'."
+  }
+]
+
+// ── QUTUB MINAR ZONES ──────────────────────────────────────
+const QUTUB_MINAR_ZONES = [
+  {
+    id: 21, name: "Qutub Minar Base", emoji: "🗼",
+    lat: 28.5244, lng: 77.1855, radius: 50, xp: 50,
+    arrival_fact: "You are looking up at the Qutub Minar, standing 72.5 meters tall. Built as a tower of victory by Qutb-ud-din Aibak in 1192, its five distinct stories feature intricate carvings and verses from the Quran.",
+    direction_hint: "Walk straight up to the towering fluted brick minaret.",
+    mini_fact: "It was struck by lightning multiple times and repaired by different rulers."
+  },
+  {
+    id: 22, name: "Iron Pillar", emoji: "⚔️",
+    lat: 28.5247, lng: 77.1849, radius: 40, xp: 75,
+    arrival_fact: "You are standing before the Iron Pillar of Delhi. Dating back to the 4th century, it has amazed scientists for decades because it has barely rusted despite being exposed to the elements for over a millennium.",
+    direction_hint: "Look for the metallic column standing in the center courtyard.",
+    mini_fact: "It is composed of 98% wrought iron, utilizing an ancient anti-corrosion technique."
+  },
+  {
+    id: 23, name: "Alai Darwaza", emoji: "🕌",
+    lat: 28.5242, lng: 77.1852, radius: 45, xp: 100,
+    arrival_fact: "You have reached the Alai Darwaza, the southern gateway of the Quwwat-ul-Islam Mosque built by Alauddin Khalji. It is considered a masterpiece of Indo-Islamic architecture, showcasing the first true dome and arches in India.",
+    direction_hint: "It is the large domed gateway structure immediately south of the minaret.",
+    mini_fact: "The gateway uses red sandstone alternating with white marble for a striking effect."
+  },
+  {
+    id: 24, name: "Alai Minar", emoji: "🏗️",
+    lat: 28.5256, lng: 77.1843, radius: 50, xp: 125,
+    arrival_fact: "This massive pile of rubble is the Alai Minar. Alauddin Khalji intended to build a tower exactly twice the height of the Qutub Minar, but work stopped after his death when it was only 24.5 meters high.",
+    direction_hint: "Walk to the northern side of the complex to find the wide, unfinished rubble base.",
+    mini_fact: "The core is 24.5 meters high and was never given its outer facing of carved stone."
+  }
+]
+
+// ── KONARK SUN TEMPLE ZONES ──────────────────────────────
+const KONARK_ZONES = [
+  {
+    id: 31, name: "Entrance Gate", emoji: "🚪",
+    lat: 19.88712, lng: 86.09486, radius: 50, xp: 50,
+    arrival_fact: "You are at the entrance to the Konark Sun Temple complex, where the vast stone chariot of Surya, the Sun God, first comes into view. Built in the 13th century by King Narasimhadeva I, this UNESCO World Heritage site was designed as a cosmic calendar carved in stone.",
+    direction_hint: "Walk through the main approach path toward the monumental stone temple platform.",
+    mini_fact: "Konark comes from Kona (corner) and Arka (sun), meaning the Sun of the corner.",
+    local_belief: "Sailors along the Odisha coast called this the Black Pagoda - legend holds that powerful lodestones built into the temple walls were so strong they threw off ship compasses for miles out at sea."
+  },
+  {
+    id: 32, name: "Main Chariot Wheel", emoji: "🛞",
+    lat: 19.88746, lng: 86.09478, radius: 45, xp: 75,
+    arrival_fact: "You are beside one of Konark's giant stone wheels, each carved with spokes, floral motifs, and miniature figures. These wheels are not just decoration: they symbolize the Sun God's celestial chariot and are often read as precision sundials that track the movement of time through shadow.",
+    direction_hint: "Move along the outer temple wall and look for the massive carved wheel rising from the plinth.",
+    mini_fact: "The temple features 24 wheels, often linked to the 24 hours of the day.",
+    local_belief: "Locals believe Surya's chariot never truly stopped - at the exact moment of winter solstice dawn, the first ray of sunlight strikes the idol's crown, and those present are said to receive a flash of divine sight."
+  },
+  {
+    id: 33, name: "Natya Mandapa (Dance Hall)", emoji: "💃",
+    lat: 19.88750, lng: 86.09496, radius: 45, xp: 100,
+    arrival_fact: "You are standing at the Natya Mandapa, the dance pavilion where ritual performance once animated the temple precinct. Its pillars and walls are carved with musicians and dancers, offering a remarkable record of movement, costume, and devotion in medieval Odisha.",
+    direction_hint: "Head toward the pillared platform in front of the main shrine complex.",
+    mini_fact: "Many dance poses here are studied in relation to the Odissi classical tradition."
+  },
+  {
+    id: 34, name: "Jagamohana (Porch)", emoji: "🏛️",
+    lat: 19.88756, lng: 86.09500, radius: 45, xp: 125,
+    arrival_fact: "You have reached the Jagamohana, the great assembly porch that still dominates the skyline at Konark. Its heavy, tiered mass and dense sculptural bands show the Kalinga style at monumental scale, designed to draw pilgrims inward toward the sacred core.",
+    direction_hint: "Walk up toward the tallest surviving structure at the center of the complex.",
+    mini_fact: "Jagamohana means assembly hall, where devotees gathered before the sanctum.",
+    local_belief: "The most ancient legend behind Konark's very existence begins with Samba, the son of Krishna. Samba mocked the sage Narada, who cursed him with leprosy as punishment for his arrogance. For twelve years Samba performed intense penance at the Mitravana forest on the banks of the Chandrabhaga river - exactly where Konark stands today. Surya, the Sun God, was so moved by his devotion that he appeared and cured Samba completely. In gratitude, Samba built this entire temple to honor Surya - making the Sun Temple not just an architectural achievement, but a monument born from a son's suffering, a curse, and a miracle."
+  },
+  {
+    id: 35, name: "Deul (Main Tower Ruins)", emoji: "🧱",
+    lat: 19.88764, lng: 86.09504, radius: 45, xp: 150,
+    arrival_fact: "You are near the remains of the Deul, the original sanctum tower that once soared above Konark. Though the main tower collapsed centuries ago, its surviving base and scattered stonework still reveal the immense ambition of the original temple plan.",
+    direction_hint: "Move to the rear core of the temple where the sanctum once stood.",
+    mini_fact: "Early records suggest the original tower may have risen over 60 meters.",
+    local_belief: "Locals believe the original Surya idol floated in mid-air, suspended by lodestones hidden in the walls and ceiling with no physical support. When Portuguese sailors removed the central magnet, the magnetic balance collapsed - and so did the tower."
+  },
+  {
+    id: 36, name: "Lion-Elephant-Human Sculpture", emoji: "🦁",
+    lat: 19.88742, lng: 86.09488, radius: 40, xp: 175,
+    arrival_fact: "You are at Konark's iconic guardian sculpture: a lion crushing an elephant, with a human figure pinned beneath. The carving is both dramatic and symbolic - the lion represents royal power, the elephant stands for wealth and brute strength, and the human below signifies the common person pressed under both forces. This stark hierarchy in stone is one of the temple's most photographed and discussed images.",
+    direction_hint: "Look beside the temple stairways for the monumental paired statues flanking the approach.",
+    mini_fact: "Each composition was carved from a single stone mass to maximize visual impact.",
+    local_belief: "Legend tells of Dharmapada, the 12-year-old son of the chief architect, who leapt from the top of the completed tower at dawn - his sacrifice was said to be the only act that could release the craftsmen from execution after years of failed construction."
+  },
+  {
+    id: 37, name: "Konark Museum", emoji: "🏺",
+    lat: 19.88806, lng: 86.09462, radius: 50, xp: 200,
+    arrival_fact: "You have arrived at the site museum, where rescued sculptures and architectural fragments are preserved away from weathering. Here you can study details up close that are difficult to see on the high temple walls.",
+    direction_hint: "Follow the pathway toward the museum complex near the temple grounds.",
+    mini_fact: "The museum helps conserve original carvings while replicas protect key outdoor views."
+  },
+  {
+    id: 38, name: "Sun Terrace", emoji: "🌞",
+    lat: 19.88800, lng: 86.09540, radius: 55, xp: 225,
+    arrival_fact: "You are on an open terrace facing the eastern sky, where Konark's solar geometry is easiest to appreciate at dawn and dusk. From here the temple's wheel, horse, and chariot symbolism align into a single vision of motion, light, and cosmic time.",
+    direction_hint: "Walk to the elevated open edge of the complex with a broad view of the temple silhouette.",
+    mini_fact: "Konark was intentionally oriented to greet the first rays of the rising sun.",
+    local_belief: "Locals believe Surya's chariot never truly stopped - at the exact moment of winter solstice dawn, the first ray of sunlight strikes the idol's crown, and those present are said to receive a flash of divine sight."
+  },
+  {
+    id: 39, name: "Aruna Stambha", emoji: "🗿",
+    lat: 19.88718, lng: 86.09492, radius: 45, xp: 250,
+    arrival_fact: "You are at the remembered location of the Aruna Stambha, the towering monolithic chlorite pillar that once stood before Konark's entrance. The pillar was crowned by Aruna, the charioteer of Surya, announcing the temple's solar identity even before devotees entered the complex. In the 18th century, the column was relocated to the Jagannath Temple precinct at Puri, where it still stands at the Lion Gate. Its journey links two of Odisha's most sacred ritual landscapes.",
+    direction_hint: "Pause near the forecourt axis and imagine the original ceremonial line leading into the temple.",
+    mini_fact: "Aruna Stambha is among the finest surviving chlorite monoliths from medieval Odisha.",
+    local_belief: "Sailors along the Odisha coast called this the Black Pagoda - legend holds that powerful lodestones built into the temple walls were so strong they threw off ship compasses for miles out at sea."
+  },
+  {
+    id: 40, name: "Seven Horses", emoji: "🐎",
+    lat: 19.88748, lng: 86.09468, radius: 45, xp: 275,
+    arrival_fact: "You are viewing the sculpted horses that pull Surya's stone chariot across the temple facade. The canonical set of seven symbolizes the days of the week and the rhythmic cycle of time driven by the sun. Their straining posture gives the architecture a sense of forward motion, as if the entire monument is surging eastward. This kinetic imagery is central to Konark's cosmic storytelling.",
+    direction_hint: "Move along the platform edge and look for the projecting horse sculptures attached to the chariot base.",
+    mini_fact: "Konark's horses and wheels together transform the temple into a complete celestial vehicle."
+  },
+  {
+    id: 41, name: "North Face Chariot Wheels", emoji: "🧭",
+    lat: 19.88758, lng: 86.09476, radius: 45, xp: 300,
+    arrival_fact: "You have reached the north elevation, where the great stone wheels are deeply carved with spokes, hubs, and figurative bands. These wheels are often interpreted as sundials, with shadow positions indicating approximate time during parts of the day. The precision of geometry and ornament demonstrates how astronomy, ritual, and art merged in Kalinga architecture. Standing here, you can read time as sculpture.",
+    direction_hint: "Walk to the northern side of the main structure and locate the large radial carvings at plinth level.",
+    mini_fact: "Each major wheel has eight principal spokes commonly linked to the prahars of the day.",
+    local_belief: "Locals believe Surya's chariot never truly stopped - at the exact moment of winter solstice dawn, the first ray of sunlight strikes the idol's crown, and those present are said to receive a flash of divine sight."
+  },
+  {
+    id: 42, name: "South Face Chariot Wheels", emoji: "🕰️",
+    lat: 19.88738, lng: 86.09476, radius: 45, xp: 325,
+    arrival_fact: "You are now at the south elevation wheels, where sun angle and shadow behavior differ from the north side. Craftsmen used orientation and depth of carving to create readable shadow edges across the spokes. Comparing both sides reveals how the monument engages changing light through the day. Konark thus functions not only as a shrine but as a sophisticated stone instrument of solar observation.",
+    direction_hint: "Continue around the main platform to the southern face and compare wheel shadows with the opposite side.",
+    mini_fact: "Guides often demonstrate time-reading techniques here using spoke intersections and rim shadows.",
+    local_belief: "Locals believe Surya's chariot never truly stopped - at the exact moment of winter solstice dawn, the first ray of sunlight strikes the idol's crown, and those present are said to receive a flash of divine sight."
+  },
+  {
+    id: 43, name: "Erotic Sculpture Panels (Kama Panels)", emoji: "🪷",
+    lat: 19.88754, lng: 86.09516, radius: 45, xp: 350,
+    arrival_fact: "You are in front of Konark's celebrated kama or mithuna panels, where intimate human forms are carved with extraordinary confidence and detail. In medieval temple thought, these images are not merely sensual decoration but part of a wider vision of life, fertility, auspiciousness, and the union of energies. Many scholars also read them through tantric symbolism, where worldly experience and spiritual ascent are not opposed but interlinked. Their placement within sacred architecture reflects a holistic philosophy of existence.",
+    direction_hint: "Look along the sculptural bands on the outer walls, especially near transitional zones between major architectural elements.",
+    mini_fact: "Konark's figurative program ranges from courtly life to divine iconography, making it unusually encyclopedic."
+  },
+  {
+    id: 44, name: "Navagraha Slab", emoji: "🪐",
+    lat: 19.88732, lng: 86.09494, radius: 40, xp: 375,
+    arrival_fact: "You are at the Navagraha panel, where nine planetary deities are carved in a single monumental slab. Such placements above or near gateways invoked cosmic balance before entry into the sacred interior. The ensemble reflects the importance of jyotisha, ritual timing, and celestial order in temple worship. At Konark, this planetary register reinforces the monument's deep solar and astronomical symbolism.",
+    direction_hint: "Move toward the upper doorway zone and scan for a long carved frieze featuring nine seated or standing deities.",
+    mini_fact: "Navagraha imagery is common in Odisha temples but Konark's treatment is among the most dramatic."
+  },
+  {
+    id: 45, name: "Chlorite Surya Statues", emoji: "☀️",
+    lat: 19.88760, lng: 86.09524, radius: 45, xp: 400,
+    arrival_fact: "You are facing the famed chlorite images of Surya, carved in high relief with regal boots, ornaments, and attendants. The temple preserves distinct Sun God aspects associated with different moments of the day, often interpreted as dawn, midday, and dusk manifestations. Their polished stone, iconographic clarity, and frontal authority make them central to Konark's theological program. These figures anchor the monument's identity as a dedicated solar shrine.",
+    direction_hint: "Look for the large dark-stone Surya images set into wall niches on different sides of the main structure.",
+    mini_fact: "The Surya icons are notable for foreign-style boots, a rare feature in Indian temple sculpture."
+  },
+  {
+    id: 46, name: "Musicians Gallery", emoji: "🎶",
+    lat: 19.88752, lng: 86.09532, radius: 45, xp: 425,
+    arrival_fact: "You are at a sculptural stretch often called the Musicians Gallery, crowded with apsaras, gandharvas, and instrumental performers. Drums, string instruments, and dance gestures are rendered so vividly that the stone seems to carry rhythm. These carvings testify that music and movement were integral to temple ritual culture, not peripheral ornament. Konark preserves one of the richest visual archives of performance traditions in medieval eastern India.",
+    direction_hint: "Raise your view to the upper narrative tiers and trace sequences of dancer and musician figures.",
+    mini_fact: "Iconographers use these panels to study historical instrument forms and ensemble practices."
+  },
+  {
+    id: 47, name: "Eastern Entrance", emoji: "🌅",
+    lat: 19.88714, lng: 86.09514, radius: 50, xp: 450,
+    arrival_fact: "You are at the eastern ceremonial approach, historically aligned with the rising sun and pilgrim movement. Processional entry from this direction reinforced the temple's solar orientation and ritual drama at dawn. Architectural sequencing here guided worshippers from worldly space into progressively sanctified zones. The axis embodies Konark's fusion of cosmology, choreography, and stone planning.",
+    direction_hint: "Follow the east-west axis and stand where the pathway opens toward the principal facade.",
+    mini_fact: "Sun-oriented temple planning is a defining hallmark of Konark's design logic.",
+    local_belief: "The night before invaders reached Konark, the last priest Dadhihaman is said to have carried the sacred Surya idol away to Puri under cover of darkness. It was never returned."
+  },
+  {
+    id: 48, name: "Bhog Mandapa (Kitchen Ruins)", emoji: "🍲",
+    lat: 19.88792, lng: 86.09518, radius: 45, xp: 475,
+    arrival_fact: "You are at the remains identified as the Bhog Mandapa area, associated with preparation and offering of ritual food. Large temple complexes depended on such service structures to sustain daily worship, festivals, and feeding traditions. Even in ruin, this zone reveals that sacred architecture included practical systems of labor, storage, and distribution. It is a reminder that devotion here was both ceremonial and deeply material.",
+    direction_hint: "Walk toward the peripheral ruined blocks near the main ceremonial core and look for low structural remnants.",
+    mini_fact: "Temple kitchens in Odisha were major institutional spaces supporting large pilgrim economies."
+  },
+  {
+    id: 49, name: "Mayadevi Temple", emoji: "🛕",
+    lat: 19.88808, lng: 86.09498, radius: 45, xp: 500,
+    arrival_fact: "You are at the Mayadevi Temple, a secondary shrine within the Konark complex linked to one of Surya's consorts in local tradition. Its presence demonstrates that the sacred landscape here was plural, with subsidiary cults coexisting around the main solar monument. Archaeological and iconographic evidence suggests this shrine had an important ritual role rather than being a minor afterthought. Together, the structures create a layered temple ecosystem.",
+    direction_hint: "Move to the smaller freestanding shrine zone inside the broader compound, slightly away from the main jagamohana mass.",
+    mini_fact: "Mayadevi is often associated with the wider family and retinue traditions around Surya worship."
+  },
+  {
+    id: 50, name: "Vaishnava Shrine", emoji: "🙏",
+    lat: 19.88796, lng: 86.09482, radius: 45, xp: 525,
+    arrival_fact: "You are near the Vaishnava shrine remains, a key indicator that Konark's precinct carried multiple devotional strands over time. The presence of Vishnu-linked worship elements within a predominantly Surya complex reflects the fluid, layered practice of medieval Indian religion. Rather than rigid sectarian boundaries, the site records interaction, adaptation, and shared sacred geography. This makes Konark not just a single-purpose monument, but a living palimpsest of belief.",
+    direction_hint: "Look for the smaller shrine footprint within the compound that differs from the main solar iconographic sequence.",
+    mini_fact: "Konark's compound history reveals centuries of ritual overlap, reuse, and reinterpretation."
+  }
+]
+
+const MONUMENT_ZONES: Record<string, typeof TAJ_ZONES> = {
+  'taj-mahal': TAJ_ZONES,
+  'red-fort': RED_FORT_ZONES,
+  'qutub-minar': QUTUB_MINAR_ZONES,
+  'konark': KONARK_ZONES,
+}
+
+function getBearing(from: { lat: number; lng: number }, to: { lat: number; lng: number }): number {
+  const dLng = (to.lng - from.lng) * Math.PI / 180
+  const lat1 = from.lat * Math.PI / 180
+  const lat2 = to.lat * Math.PI / 180
+  const y = Math.sin(dLng) * Math.cos(lat2)
+  const x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLng)
+  return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360
+}
+
+// ── Per-monument starting user position (Explore) ────────
+const EXPLORE_USER_START: Record<string, { lat: number; lng: number }> = {
+  'taj-mahal':   { lat: 27.17300, lng: 78.04215 },
+  'red-fort':    { lat: 28.6545, lng: 77.2375 },
+  'qutub-minar': { lat: 28.5235, lng: 77.1845 },
+  'konark':      { lat: 19.8876, lng: 86.0952 },
+}
+
+// ── LEAFLET MAP (dynamic, no SSR) ────────────────────────
+const ExploreMap = dynamic(() => Promise.resolve(function ExploreMapInner({
+  zones, currentZoneIndex, completedZones, userPos, isCallActive, isSpeaking, monumentId
+}: {
+  zones: typeof TAJ_ZONES; currentZoneIndex: number;
+  completedZones: number[]; userPos: { lat: number; lng: number };
+  isCallActive: boolean; isSpeaking: boolean; monumentId: string;
+}) {
+  const mapRef = useRef<any>(null)
+  const containerRef = useRef<HTMLDivElement>(null)
+  const markersRef = useRef<any[]>([])
+  const lastMonumentRef = useRef<string>('')
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    if (!document.getElementById('leaflet-css')) {
+      const link = document.createElement('link')
+      link.id = 'leaflet-css'
+      link.rel = 'stylesheet'
+      link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css'
+      document.head.appendChild(link)
+    }
+    const L = require('leaflet')
+    if (!containerRef.current) return
+
+    // Destroy map if monument changed
+    if (mapRef.current && lastMonumentRef.current !== monumentId) {
+      mapRef.current.remove()
+      mapRef.current = null
+    }
+    lastMonumentRef.current = monumentId
+
+    // Use first zone as center
+    const centerLat = zones[0]?.lat ?? 27.17460
+    const centerLng = zones[0]?.lng ?? 78.04215
+
+    if (mapRef.current) {
+      markersRef.current.forEach(m => mapRef.current!.removeLayer(m))
+      markersRef.current = []
+    } else {
+      mapRef.current = L.map(containerRef.current, {
+        center: [centerLat, centerLng], zoom: 17,
+        zoomControl: false, attributionControl: false,
+      })
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(mapRef.current)
+      L.control.zoom({ position: 'topright' }).addTo(mapRef.current)
+    }
+    // Pan to current zone
+    const activeZone = zones[currentZoneIndex]
+    if (activeZone) mapRef.current.panTo([activeZone.lat, activeZone.lng])
+
+    const map = mapRef.current!
+    const newMarkers: any[] = []
+
+    // Path line connecting zones
+    const pathCoords = zones.map(z => [z.lat, z.lng])
+    const polyline = L.polyline(pathCoords, {
+      color: '#C9A84C', weight: 2, dashArray: '8 6', opacity: 0.6
+    }).addTo(map)
+    newMarkers.push(polyline)
+
+    // Zone markers
+    zones.forEach((zone, i) => {
+      const isActive = i === currentZoneIndex
+      const isComplete = completedZones.includes(zone.id)
+      const isFuture = !isActive && !isComplete
+
+      const marker = L.circleMarker([zone.lat, zone.lng], {
+        radius: isActive ? 14 : 10,
+        fillColor: isComplete ? '#4B9B8E' : isActive ? '#C9A84C' : '#555',
+        color: isComplete ? '#4B9B8E' : isActive ? '#C9A84C' : '#777',
+        fillOpacity: isActive ? 0.9 : 0.7,
+        weight: isActive ? 3 : 1,
+        className: isActive ? 'pulse-marker' : ''
+      }).addTo(map)
+
+      marker.bindPopup(`<b style="color:#333">${zone.emoji} ${zone.name}</b><br/><span style="color:#666">${isComplete ? '✅ Completed' : isFuture ? '🔒 Locked' : '📍 Current'}</span>`)
+      newMarkers.push(marker)
+
+      // Label
+      const label = L.marker([zone.lat, zone.lng], {
+        icon: L.divIcon({
+          className: '',
+          html: `<div style="font-size:18px;text-align:center;margin-top:-30px">${isComplete ? '✅' : zone.emoji}</div>`,
+          iconSize: [30, 30],
+        })
+      }).addTo(map)
+      newMarkers.push(label)
+    })
+
+    // User marker
+    const userMarker = L.circleMarker([userPos.lat, userPos.lng], {
+      radius: 8, fillColor: '#fff', color: '#C9A84C',
+      fillOpacity: 1, weight: 3
+    }).addTo(map)
+    userMarker.bindPopup('<b style="color:#333">📍 You</b>')
+    newMarkers.push(userMarker)
+
+    const youLabel = L.marker([userPos.lat, userPos.lng], {
+      icon: L.divIcon({
+        className: '',
+        html: '<div style="font-size:11px;color:#C9A84C;font-weight:700;text-align:center;margin-top:8px">You</div>',
+        iconSize: [40, 20],
+      })
+    }).addTo(map)
+    newMarkers.push(youLabel)
+
+    markersRef.current = newMarkers
+  }, [zones, currentZoneIndex, completedZones, userPos, isCallActive, isSpeaking, monumentId])
+
+  return (
+    <div style={{ position: 'relative' }}>
+      <div ref={containerRef} style={{ height: '350px', borderRadius: '16px', overflow: 'hidden', border: '1px solid rgba(201,168,76,0.3)' }} />
+      {/* Vapi status overlay */}
+      <div style={{
+        position: 'absolute', bottom: '12px', left: '50%', transform: 'translateX(-50%)',
+        background: 'rgba(15,11,30,0.9)', borderRadius: '20px', padding: '6px 16px',
+        color: isCallActive ? (isSpeaking ? '#4B9B8E' : '#C9A84C') : '#C4A882',
+        fontSize: '12px', fontWeight: 600, border: '1px solid rgba(201,168,76,0.3)',
+        backdropFilter: 'blur(8px)', zIndex: 1000
+      }}>
+        {isCallActive ? (isSpeaking ? '🔊 Guide speaking' : '🎤 Listening') : '📞 Voice Guide Off'}
+      </div>
+      <style>{`.pulse-marker { animation: markerPulse 1.5s ease infinite; } @keyframes markerPulse { 0%,100% { opacity: 0.9; } 50% { opacity: 0.5; } }`}</style>
+    </div>
+  )
+}), { ssr: false })
+
+// ── MAIN EXPLORER PAGE ───────────────────────────────────
+export default function ExplorePage() {
+  const router = useRouter()
+  const { user, profile, setProfile } = useAuth()
+  const { isCallActive, isSpeaking, endCall, restartVapiForZone } = useVapi()
+  const { lang } = useLang()
+  const [hasMounted, setHasMounted] = useState(false)
+
+  const [currentZoneIndex, setCurrentZoneIndex] = useState(0)
+  const [arrivedAtZone, setArrivedAtZone] = useState(false)
+  const [completedZones, setCompletedZones] = useState<number[]>([])
+  const [showFact, setShowFact] = useState(false)
+  const [xpEarned, setXpEarned] = useState(0)
+  const [explorerComplete, setExplorerComplete] = useState(false)
+  const [demoDistance, setDemoDistance] = useState(280)
+  const [demoMode] = useState(true)
+  const [userPos, setUserPos] = useState(EXPLORE_USER_START['taj-mahal'])
+  const [isTTSSpeaking, setIsTTSSpeaking] = useState(false)
+
+  const [exploreMonumentId, setExploreMonumentId] = useState('taj-mahal')
+  const monumentSelected = true // always start directly into explore
+  const [monumentsList] = useState<{id: string; name: string}[]>(() =>
+    Object.keys(MONUMENT_ZONES).map(id => ({ id, name: MONUMENT_NAMES[id] || id }))
+  )
+  
+  const activeZones = MONUMENT_ZONES[exploreMonumentId] || TAJ_ZONES
+
+  const zone = activeZones[currentZoneIndex]
+  const bearing = getBearing(userPos, { lat: zone.lat, lng: zone.lng })
+
+  useEffect(() => {
+    setHasMounted(true)
+  }, [])
+
+  useEffect(() => {
+    // Load persisted monument only after hydration to avoid SSR/client render drift.
+    const stored = getMonument()?.id
+    if (!stored || !MONUMENT_ZONES[stored]) return
+    setExploreMonumentId(stored)
+    setUserPos(EXPLORE_USER_START[stored] || EXPLORE_USER_START['taj-mahal'])
+  }, [])
+
+  // ── SPEAK FACT (browser TTS with voice selection) ────────
+  const speakFact = useCallback((text: string) => {
+    if (!window.speechSynthesis) return
+    window.speechSynthesis.cancel()
+    const utterance = new SpeechSynthesisUtterance(text)
+    utterance.lang = 'en-US'
+    utterance.rate = 0.88
+    utterance.pitch = 1.0
+    const voices = window.speechSynthesis.getVoices()
+    const preferred = voices.find(v =>
+      v.name.includes('Google') ||
+      v.name.includes('Samantha') ||
+      v.name.includes('Daniel') ||
+      v.lang.includes('en-US')
+    )
+    if (preferred) utterance.voice = preferred
+    utterance.onstart = () => setIsTTSSpeaking(true)
+    utterance.onend = () => setIsTTSSpeaking(false)
+    utterance.onerror = () => setIsTTSSpeaking(false)
+    window.speechSynthesis.speak(utterance)
+  }, [])
+
+  // ── DEMO: simulate walking toward zone ──────────────────
+  useEffect(() => {
+    if (!demoMode || arrivedAtZone) return
+    const z = activeZones[currentZoneIndex]
+    const interval = setInterval(() => {
+      setDemoDistance(prev => {
+        if (prev <= 15) { clearInterval(interval); return 0 }
+        return prev - 12
+      })
+      setUserPos(prev => ({
+        lat: prev.lat + (z.lat - prev.lat) * 0.15,
+        lng: prev.lng + (z.lng - prev.lng) * 0.15
+      }))
+    }, 1500)
+    return () => clearInterval(interval)
+  }, [currentZoneIndex, arrivedAtZone, demoMode, exploreMonumentId])
+
+  // Reset distance when zone changes + auto-speak direction hint
+  useEffect(() => {
+    setDemoDistance(Math.floor(Math.random() * 150) + 150)
+    setArrivedAtZone(false)
+    setShowFact(false)
+    // Auto-narrate direction hint after short delay
+    const timer = setTimeout(() => {
+      speakFact(activeZones[currentZoneIndex].direction_hint)
+    }, 1000)
+    return () => { clearTimeout(timer); window.speechSynthesis?.cancel() }
+  }, [currentZoneIndex, speakFact, exploreMonumentId])
+
+  // ── HANDLE ARRIVAL ──────────────────────────────────────
+  const handleArrival = useCallback(async () => {
+    if (arrivedAtZone) return
+    setArrivedAtZone(true)
+    setShowFact(true)
+    setDemoDistance(0)
+
+    const z = activeZones[currentZoneIndex]
+
+    // Write XP to Supabase
+    if (user) {
+      try {
+        const newXP = await addXP(user.id, z.xp, 'ZONE_EXPLORE')
+        setProfile((prev: any) => ({ ...prev, total_xp: newXP }))
+        await computeAndSaveBadges(user.id, { total_xp: newXP })
+        window.dispatchEvent(new Event('xp-updated'))
+      } catch (err) { console.warn('XP award failed:', err) }
+    }
+    setXpEarned(z.xp)
+    setCompletedZones(prev => [...prev, z.id])
+
+    // Rebuild + restart VAPI with a fresh zone-level prompt on every arrival.
+    const localBelief = (z as { local_belief?: string }).local_belief
+    await restartVapiForZone({
+      name: z.name,
+      arrival_fact: z.arrival_fact,
+      direction_hint: z.direction_hint,
+      mini_fact: z.mini_fact,
+      local_belief: localBelief,
+      monumentId: exploreMonumentId
+    })
+    speakFact(z.arrival_fact)
+  }, [arrivedAtZone, currentZoneIndex, user, profile, restartVapiForZone, setProfile, speakFact, exploreMonumentId])
+
+  const stopNarration = useCallback(() => {
+    window.speechSynthesis?.cancel()
+    setIsTTSSpeaking(false)
+    if (isCallActive) endCall()
+  }, [isCallActive, endCall])
+
+  // ── COMPLETION SCREEN ───────────────────────────────────
+  if (explorerComplete) {
+    const totalXP = activeZones.reduce((sum, z) => sum + z.xp, 0)
+    return (
+      <AppShell>
+        <style>{`@keyframes confetti { 0% { transform: translateY(-20px) scale(0.8); opacity: 0; } 50% { opacity: 1; } 100% { transform: translateY(0) scale(1); opacity: 1; } }`}</style>
+        <div style={{ textAlign: 'center', padding: '40px 20px', animation: 'confetti 0.6s ease' }}>
+          <div style={{ fontSize: '64px', marginBottom: '16px' }}>🏛️</div>
+          <h1 style={{ color: '#C9A84C', fontFamily: 'Georgia,serif', fontSize: '32px', marginBottom: '8px' }}>
+            Explorer Complete!
+          </h1>
+          <p style={{ color: '#F5E6D3', fontSize: '16px', marginBottom: '24px' }}>
+            You have explored all {activeZones.length} historic zones of the {MONUMENT_NAMES[exploreMonumentId] || 'Monument'}
+          </p>
+          <div style={{ fontSize: '48px', fontWeight: '700', color: '#C9A84C', marginBottom: '8px' }}>
+            +{totalXP} XP
+          </div>
+          <p style={{ color: '#C4A882', marginBottom: '32px' }}>Total XP earned this exploration</p>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', justifyContent: 'center', marginBottom: '32px' }}>
+            {activeZones.map(z => (
+              <div key={z.id} style={{
+                background: 'rgba(201,168,76,0.15)', border: '1px solid rgba(201,168,76,0.3)',
+                borderRadius: '20px', padding: '8px 16px', color: '#C9A84C', fontSize: '14px'
+              }}>
+                ✅ {z.emoji} {z.name}
+              </div>
+            ))}
+          </div>
+          <button onClick={() => router.push('/')} style={{
+            background: 'linear-gradient(135deg,#C9A84C,#D4893F)', borderRadius: '16px',
+            padding: '14px 32px', color: '#0F0B1E', fontWeight: '700', fontSize: '16px',
+            border: 'none', cursor: 'pointer'
+          }}>
+            🏠 Back to Home
+          </button>
+        </div>
+      </AppShell>
+    )
+  }
+
+  // No blocking gate — always go directly into explore
+  if (!hasMounted) {
+    return (
+      <AppShell>
+        <div style={{ maxWidth: '800px', margin: '0 auto', padding: '20px' }}>
+          <p style={{ color: '#C4A882', fontSize: '13px' }}>Loading explorer...</p>
+        </div>
+      </AppShell>
+    )
+  }
+
+  return (
+    <AppShell>
+      <style>{`
+        @keyframes pulse { 0%,100% { opacity:1 } 50% { opacity:0.5 } }
+        @keyframes fadeIn { from { opacity:0; transform:translateY(10px) } to { opacity:1; transform:translateY(0) } }
+        @keyframes spin { from { transform: rotate(0deg) } to { transform: rotate(360deg) } }
+      `}</style>
+
+      {/* Demo mode banner */}
+      {demoMode && (
+        <div style={{
+          background: 'rgba(201,168,76,0.15)', borderBottom: '1px solid rgba(201,168,76,0.3)',
+          padding: '8px 16px', textAlign: 'center', color: '#C9A84C', fontSize: '12px', fontWeight: 600
+        }}>
+          {lang === 'hi' ? '🎮 डेमो मोड — सिंथेटिक GPS सक्रिय | अन्वेषण करने के लिए किसी भी दूरी पर "मैं पहुँच गया" दबाएँ' : '🎮 DEMO MODE — Synthetic GPS active | Press "I\'ve Arrived" at any distance to explore'}
+        </div>
+      )}
+
+  <div style={{ maxWidth: '800px', margin: '0 auto', padding: '20px' }}>
+          {/* Header */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px', flexWrap: 'wrap', gap: '10px' }}>
+            <div>
+              {/* Monument Switcher */}
+              <div style={{ position: 'relative', display: 'inline-block', marginBottom: 4 }}>
+                <select
+                  value={exploreMonumentId}
+                  onChange={e => {
+                    const id = e.target.value
+                    const name = monumentsList.find(m => m.id === id)?.name || id
+                    // Cancel any ongoing narration first
+                    window.speechSynthesis?.cancel()
+                    setIsTTSSpeaking(false)
+                    if (isCallActive) endCall()
+                    // Reset all zone state
+                    setExploreMonumentId(id); saveMonument(id, name)
+                    setCurrentZoneIndex(0); setCompletedZones([]); setXpEarned(0)
+                    setExplorerComplete(false); setArrivedAtZone(false); setShowFact(false)
+                    const newStart = EXPLORE_USER_START[id] || EXPLORE_USER_START['taj-mahal']
+                    setUserPos(newStart)
+                    setDemoDistance(Math.floor(Math.random() * 150) + 150)
+                  }}
+                  style={{
+                    fontFamily: 'Georgia,serif', fontSize: '22px', fontWeight: 700,
+                    color: '#C9A84C', background: 'transparent', border: 'none',
+                    paddingRight: 24, cursor: 'pointer', appearance: 'none' as const,
+                    outline: 'none'
+                  }}
+                >
+                  {monumentsList.map(m => <option key={m.id} value={m.id} style={{ background: '#1C1638', color: '#C9A84C' }}>🏛️ {m.name} {lang === 'hi' ? 'अन्वेषक' : 'Explorer'}</option>)}
+                </select>
+                <ChevronDown style={{ position: 'absolute', right: 0, top: 6, width: 14, height: 14, color: '#C9A84C', pointerEvents: 'none' }} />
+              </div>
+              <p style={{ color: '#C4A882', fontSize: '13px', margin: '4px 0 0' }}>
+                {lang === 'hi' ? 'ज़ोन' : 'Zone'} {currentZoneIndex + 1} / {activeZones.length}
+              </p>
+            </div>
+
+          </div>
+
+          {/* Breadcrumb */}
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '20px' }}>
+            {activeZones.map((z, i) => (
+              <div key={z.id} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <div style={{
+                  width: 12, height: 12, borderRadius: '50%',
+                  background: completedZones.includes(z.id) ? '#4B9B8E'
+                    : i === currentZoneIndex ? '#C9A84C' : '#444',
+                  animation: i === currentZoneIndex ? 'pulse 1.5s infinite' : 'none',
+                  border: i === currentZoneIndex ? '2px solid #C9A84C' : 'none'
+                }} />
+                {i < activeZones.length - 1 && (
+                  <div style={{ width: 24, height: 2, background: completedZones.includes(z.id) ? '#4B9B8E' : '#333' }} />
+                )}
+              </div>
+            ))}
+          </div>
+
+          {/* Map */}
+          <div style={{ marginBottom: '16px' }}>
+            <ExploreMap
+              zones={activeZones} currentZoneIndex={currentZoneIndex}
+              completedZones={completedZones} userPos={userPos}
+              isCallActive={isCallActive} isSpeaking={isSpeaking}
+              monumentId={exploreMonumentId}
+            />
+          </div>
+
+          {/* ── DIRECTION CARD (before arrival) ──────── */}
+          {!showFact && (
+            <div style={{
+              background: 'rgba(28,22,56,0.9)', border: '1px solid rgba(201,168,76,0.2)',
+              borderRadius: '16px', padding: '24px', animation: 'fadeIn 0.4s ease'
+            }}>
+              <h2 style={{ color: '#C9A84C', fontFamily: 'Georgia,serif', fontSize: '22px', marginBottom: '4px' }}>
+                {zone.emoji} {zone.name}
+              </h2>
+              <p style={{ color: '#C4A882', fontSize: '12px', marginBottom: '16px' }}>
+                {lang === 'hi' ? 'ज़ोन' : 'Zone'} {currentZoneIndex + 1} / {activeZones.length} • +{zone.xp} XP {lang === 'hi' ? 'आगमन पर' : 'on arrival'}
+              </p>
+
+              {/* Direction hint */}
+              <div style={{
+                background: 'rgba(201,168,76,0.08)', borderLeft: '3px solid #C9A84C',
+                borderRadius: '8px', padding: '12px 14px', marginBottom: '20px'
+              }}>
+                <p style={{ color: '#F5E6D3', fontSize: '14px', lineHeight: '1.6', margin: 0 }}>
+                  🧭 {zone.direction_hint}
+                </p>
+              </div>
+
+              {/* Distance + Compass */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '24px', marginBottom: '20px' }}>
+                {/* Compass arrow */}
+                <div style={{ width: 60, height: 60, position: 'relative' }}>
+                  <svg width="60" height="60" viewBox="0 0 60 60" style={{ transform: `rotate(${bearing}deg)`, transition: 'transform 0.5s ease' }}>
+                    <circle cx="30" cy="30" r="28" fill="none" stroke="rgba(201,168,76,0.3)" strokeWidth="2" />
+                    <polygon points="30,6 24,26 36,26" fill="#C9A84C" />
+                    <circle cx="30" cy="30" r="4" fill="#C9A84C" />
+                  </svg>
+                </div>
+
+                {/* Distance */}
+                <div style={{ textAlign: 'center' }}>
+                  <div style={{
+                    fontSize: '48px', fontWeight: '700',
+                    color: demoDistance < 30 ? '#4B9B8E' : '#C9A84C',
+                    fontFamily: 'Georgia,serif', lineHeight: 1
+                  }}>
+                    {demoDistance}m
+                  </div>
+                  <div style={{ color: '#C4A882', fontSize: '14px', marginTop: '4px' }}>
+                    {demoDistance > 100 ? (lang === 'hi' ? '🚶 चलते रहें...' : '🚶 Keep walking...') : demoDistance > 30 ? (lang === 'hi' ? '📍 करीब आ रहे हैं!' : '📍 Getting close!') : (lang === 'hi' ? '✅ आप यहाँ हैं!' : '✅ You are here!')}
+                  </div>
+                </div>
+              </div>
+
+              {/* I've Arrived button */}
+              <button
+                onClick={handleArrival}
+                disabled={arrivedAtZone}
+                style={{
+                  background: arrivedAtZone ? 'rgba(75,155,142,0.3)' : 'linear-gradient(135deg,#4B9B8E,#3a7a6e)',
+                  borderRadius: '16px', padding: '16px 32px', color: 'white',
+                  fontWeight: '700', fontSize: '18px', width: '100%',
+                  border: 'none', cursor: arrivedAtZone ? 'default' : 'pointer',
+                }}
+              >
+                {arrivedAtZone ? (lang === 'hi' ? '✅ पहुँच गए!' : '✅ Arrived!') : (lang === 'hi' ? "📍 मैं पहुँच गया!" : "📍 I've Arrived!")}
+              </button>
+            </div>
+          )}
+
+          {/* ── FACT REVEAL CARD (after arrival) ─────── */}
+          {showFact && (
+            <div style={{
+              background: 'rgba(28,22,56,0.95)', border: '1px solid #C9A84C',
+              borderRadius: '16px', padding: '24px', animation: 'fadeIn 0.5s ease'
+            }}>
+              {/* XP Badge */}
+              <div style={{
+                background: 'linear-gradient(135deg,#C9A84C,#D4893F)', borderRadius: '20px',
+                padding: '6px 16px', display: 'inline-flex', alignItems: 'center',
+                gap: '6px', marginBottom: '16px'
+              }}>
+                <span style={{ fontSize: '16px' }}>⚡</span>
+                <span style={{ color: '#0F0B1E', fontWeight: '700' }}>+{xpEarned} XP {lang === 'hi' ? 'प्राप्त किए!' : 'Earned!'}</span>
+              </div>
+
+              <h3 style={{ color: '#C9A84C', fontFamily: 'Georgia,serif', fontSize: '20px', marginBottom: '12px' }}>
+                {zone.emoji} {zone.name}
+              </h3>
+
+              <p style={{ color: '#F5E6D3', lineHeight: '1.7', fontSize: '15px', marginBottom: '16px' }}>
+                {zone.arrival_fact}
+              </p>
+
+              {/* Mini fact chip */}
+              <div style={{
+                background: 'rgba(75,155,142,0.15)', border: '1px solid rgba(75,155,142,0.2)',
+                borderRadius: '10px', padding: '10px 14px', color: '#4B9B8E', fontSize: '13px',
+                marginBottom: '16px'
+              }}>
+                💡 {zone.mini_fact}
+              </div>
+
+              {/* Speaking indicator + stop button */}
+              {(isSpeaking || isTTSSpeaking) && (
+                <div style={{
+                  background: 'rgba(201,168,76,0.1)',
+                  border: '1px solid #C9A84C44',
+                  borderRadius: '10px',
+                  padding: '8px 14px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  marginBottom: '12px'
+                }}>
+                  <div style={{
+                    width: '8px', height: '8px',
+                    borderRadius: '50%',
+                    background: '#C9A84C',
+                    animation: 'pulse 1s infinite'
+                  }}/>
+                  <span style={{ color: '#C9A84C', fontSize: '13px' }}>
+                    🔊 Audio guide narrating...
+                  </span>
+                  <button
+                    onClick={stopNarration}
+                    style={{
+                      marginLeft: 'auto',
+                      background: 'none',
+                      border: 'none',
+                      color: '#C4A882',
+                      cursor: 'pointer',
+                      fontSize: '12px'
+                    }}
+                  >
+                    ⏹ Stop
+                  </button>
+                </div>
+              )}
+
+              {/* Next zone or complete */}
+              {currentZoneIndex < activeZones.length - 1 ? (
+                <button
+                  onClick={() => {
+                    window.speechSynthesis?.cancel()
+                    setCurrentZoneIndex(prev => prev + 1)
+                  }}
+                  style={{
+                    background: 'linear-gradient(135deg,#C9A84C,#D4893F)', borderRadius: '12px',
+                    padding: '12px 24px', color: '#0F0B1E', fontWeight: '700', fontSize: '15px',
+                    border: 'none', cursor: 'pointer', width: '100%'
+                  }}
+                >
+                  {lang === 'hi' ? 'अगला ज़ोन' : 'Next Zone'}: {activeZones[currentZoneIndex + 1].emoji} {activeZones[currentZoneIndex + 1].name} →
+                </button>
+              ) : (
+                <button
+                  onClick={() => setExplorerComplete(true)}
+                  style={{
+                    background: 'linear-gradient(135deg,#534AB7,#3d35a0)', borderRadius: '12px',
+                    padding: '12px 24px', color: 'white', fontWeight: '700', fontSize: '15px',
+                    border: 'none', cursor: 'pointer', width: '100%'
+                  }}
+                >
+                  🎉 {lang === 'hi' ? 'अन्वेषक पूर्ण!' : 'Complete Explorer!'}
+                </button>
+              )}
+            </div>
+          )}
+      </div>
+    </AppShell>
+  )
+}
