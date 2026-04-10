@@ -13,7 +13,7 @@ export async function signUp(email: string, _password: string, fullName: string,
     email: email || prev.email,
     full_name: fullName || prev.full_name,
   }))
-  return { user }
+  return { user, error: null }
 }
 
 export async function signIn(email: string, _password: string) {
@@ -22,11 +22,19 @@ export async function signIn(email: string, _password: string) {
     ...prev,
     email: email || prev.email,
   }))
-  return { user }
+  return { user, error: null }
 }
 
 export async function signOut() {
-  return
+  return { error: null }
+}
+
+export async function session(): Promise<{ data: { session: { user: unknown } | null } }> {
+  return {
+    data: {
+      session: null,
+    },
+  }
 }
 
 export async function getCurrentUser() {
@@ -98,6 +106,7 @@ export const authClient = {
   signUp,
   signIn,
   signOut,
+  session,
   getCurrentUser,
   getUserProfile,
   updateUserProfile,

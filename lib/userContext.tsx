@@ -45,6 +45,19 @@ interface UserContextType {
   userConfig: UserConfig | null
   setUserType: (type: UserType) => void
   isSelected: boolean
+  profile: {
+    id?: string
+    total_xp?: number
+    monuments_visited?: unknown[]
+    quiz_scores?: Record<string, unknown>
+    full_name?: string
+    email?: string
+    [key: string]: unknown
+  } | null
+  level: string
+  badges: Array<{ unlocked?: boolean; [key: string]: unknown }>
+  refreshProfile: () => Promise<void>
+  addXpLocal: (_xp: number, _monumentId?: string) => Promise<void>
 }
 
 const UserContext = createContext<UserContextType>({
@@ -52,6 +65,11 @@ const UserContext = createContext<UserContextType>({
   userConfig: null,
   setUserType: () => {},
   isSelected: false,
+  profile: null,
+  level: 'Starter',
+  badges: [],
+  refreshProfile: async () => {},
+  addXpLocal: async () => {},
 })
 
 export function UserProvider({ children }: { children: ReactNode }) {
@@ -78,8 +96,11 @@ export function UserProvider({ children }: { children: ReactNode }) {
 
   const userConfig = userType ? USER_TYPES[userType] : null
 
+  const refreshProfile = async () => {}
+  const addXpLocal = async (_xp: number, _monumentId?: string) => {}
+
   return (
-    <UserContext.Provider value={{ userType, userConfig, setUserType, isSelected }}>
+    <UserContext.Provider value={{ userType, userConfig, setUserType, isSelected, profile: null, level: 'Starter', badges: [], refreshProfile, addXpLocal }}>
       {children}
     </UserContext.Provider>
   )

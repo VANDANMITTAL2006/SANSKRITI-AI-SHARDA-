@@ -5,6 +5,7 @@ export interface StoredMonument {
 }
 
 export { monuments } from "../src/lib/monumentStore"
+export { monumentById } from "../src/lib/monumentStore"
 
 export function saveMonument(id: string, name: string) {
   try {

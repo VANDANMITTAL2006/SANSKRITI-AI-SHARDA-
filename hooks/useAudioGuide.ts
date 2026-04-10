@@ -13,6 +13,7 @@ export interface UseAudioGuideReturn {
   isSpeaking: boolean
   speak: (text: string) => void
   stopSpeaking: () => void
+  stop: () => void
   
   // STT State  
   isListening: boolean
@@ -343,7 +344,7 @@ export function useAudioGuide(): UseAudioGuideReturn {
   }, [])
 
   return {
-    isSpeaking, speak, stopSpeaking,
+    isSpeaking, speak, stopSpeaking, stop: stopSpeaking,
     isListening, transcript, startListening, stopListening,
     isThinking, lastQuestion, lastAnswer, conversationHistory,
     currentZone, setCurrentZone,

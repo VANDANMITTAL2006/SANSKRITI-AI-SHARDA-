@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { monuments } from "@/lib/monumentStore";
-import { useUser } from "../../lib/userContext";
+import { useUser } from "@/lib/userContext";
 import { useToast } from "@/hooks/use-toast";
 import { SectionHeader } from "@/components/mobile/SectionHeader";
 import { useLang } from "@/lib/languageContext";

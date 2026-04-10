@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { MobileCard } from "@/components/mobile/MobileCard";
 import { SectionHeader } from "@/components/mobile/SectionHeader";
-import { useUser } from "../lib/userContext";
+import { useUser } from "@/lib/userContext";
 import { useLang } from "@/lib/languageContext";
 
 const playItems = [

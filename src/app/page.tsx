@@ -5,7 +5,7 @@ import { Brain, Calendar, Camera, Compass, Map, MessageCircle, Medal, Sparkles, 
 import { MobileCard } from "@/components/mobile/MobileCard";
 import { SectionHeader } from "@/components/mobile/SectionHeader";
 import { useLang } from "@/lib/languageContext";
-import { useUser } from "../lib/userContext";
+import { useUser } from "@/lib/userContext";
 
 const quickActions = [
   { labelKey: "chat", href: "/chat", subtitleKey: "open", icon: MessageCircle },

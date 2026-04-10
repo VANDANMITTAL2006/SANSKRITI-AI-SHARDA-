@@ -36,6 +36,7 @@ interface UseVapiReturn {
   currentZoneName: string | null
   startCall: (zoneName?: string, monumentId?: string) => void
   endCall: () => void
+  stopCall: () => void
   restartVapiForZone: (zone: ZoneNarrationPayload) => Promise<void>
   error: string | null
   volumeLevel: number
@@ -594,6 +595,7 @@ ${currentLang === 'hi' ? 'CRITICAL: Respond entirely in Hindi. All facts, myths,
     currentZoneName,
     startCall,
     endCall,
+    stopCall: endCall,
     restartVapiForZone,
     error,
     volumeLevel

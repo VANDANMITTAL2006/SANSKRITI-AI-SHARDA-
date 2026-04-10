@@ -17,6 +17,10 @@ export const api = {
   getNearby: () =>
     apiClient.get('/geo/nearby'),
 
+  // Legacy alias
+  nearby: () =>
+    apiClient.get('/geo/nearby'),
+
   checkin: (lat: number, lng: number, userId = DEFAULT_USER) =>
     apiClient.post('/geo/checkin', { lat, lng, user_id: userId }),
 
@@ -61,11 +65,24 @@ export const api = {
   getLeaderboard: () =>
     apiClient.get('/game/leaderboard'),
 
+  // Legacy alias
+  leaderboard: () =>
+    apiClient.get('/game/leaderboard'),
+
   // Itinerary
   getItinerary: (monumentId: string, days = 3) =>
     apiClient.post('/tourism/itinerary', {
       monument_id: monumentId, days
     }),
+
+  // Legacy aliases
+  itinerary: (monumentId: string, days = 3) =>
+    apiClient.post('/tourism/itinerary', {
+      monument_id: monumentId, days
+    }),
+
+  leadCapture: (payload: Record<string, unknown>) =>
+    apiClient.post('/tourism/lead', payload),
 }
 
 export default api

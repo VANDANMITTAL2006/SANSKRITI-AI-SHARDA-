@@ -184,6 +184,9 @@ function useToast() {
   return {
     ...state,
     toast,
+    success: (msg: string) => toast({ description: msg }),
+    error: (msg: string) => toast({ description: msg }),
+    info: (msg: string) => toast({ description: msg }),
     dismiss: (toastId?: string) => dispatch({ type: 'DISMISS_TOAST', toastId }),
   }
 }

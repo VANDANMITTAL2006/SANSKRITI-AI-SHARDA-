@@ -23,8 +23,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     authClient.session().then(({ data }) => {
-      setSession(data.session);
-      setUser(data.session?.user ?? null);
+      const nextSession = data.session as Session | null;
+      setSession(nextSession);
+      setUser(nextSession?.user ?? null);
       setLoading(false);
     });
 

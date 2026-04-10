@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { api } from "@/lib/apiClient";
-import { useUser } from "../lib/userContext";
+import { useUser } from "@/lib/userContext";
 import { SectionHeader } from "@/components/mobile/SectionHeader";
 import { useLang } from "@/lib/languageContext";
 

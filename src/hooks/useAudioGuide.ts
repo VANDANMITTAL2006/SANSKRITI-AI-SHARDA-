@@ -16,5 +16,5 @@ export function useAudioGuide() {
     window.speechSynthesis.cancel();
   }, []);
 
-  return { speak, stop };
+  return { speak, stop, stopSpeaking: stop };
 }

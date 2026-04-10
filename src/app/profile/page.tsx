@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { MobileCard } from "@/components/mobile/MobileCard";
 import { SectionHeader } from "@/components/mobile/SectionHeader";
 import { useAuth } from "@/lib/authContext";
-import { useUser } from "../lib/userContext";
+import { useUser } from "@/lib/userContext";
 import { api } from "@/lib/apiClient";
 import { useLang } from "@/lib/languageContext";
 

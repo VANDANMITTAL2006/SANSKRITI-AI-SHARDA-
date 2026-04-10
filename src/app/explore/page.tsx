@@ -6,7 +6,7 @@ import { monuments } from "@/lib/monumentStore";
 import { bearingDegrees, haversineMeters } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { useDemoMode } from "@/lib/demoModeContext";
-import { useUser } from "../../lib/userContext";
+import { useUser } from "@/lib/userContext";
 import { useAudioGuide } from "@/hooks/useAudioGuide";
 import { useVapi } from "@/hooks/useVapi";
 import { nextTourPosition, playTourCue, waitMs } from "@/lib/tourEngine";
