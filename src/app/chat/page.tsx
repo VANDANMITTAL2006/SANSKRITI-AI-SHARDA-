@@ -21,6 +21,31 @@ export default function ChatPage() {
   const { startCall, endCall } = useVapi();
   const { t, lang } = useLang();
 
+  const prepareVoiceCallForIOS = async () => {
+    const audioContextCtor = window.AudioContext || (window as Window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+    if (audioContextCtor) {
+      const audioContext = new audioContextCtor();
+      if (audioContext.state === "suspended") {
+        await audioContext.resume();
+      }
+    }
+
+    if (navigator.mediaDevices?.getUserMedia) {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      stream.getTracks().forEach((track) => track.stop());
+    }
+  };
+
+  const handleVoiceCall = async () => {
+    try {
+      await prepareVoiceCallForIOS();
+      await startCall(undefined, monumentId);
+    } catch (error) {
+      console.warn("[Vapi] iOS voice preflight failed:", error);
+      toast.error("Microphone access is required to start the voice call.");
+    }
+  };
+
   const submitQuestion = async (rawQuestion: string) => {
     const trimmed = rawQuestion.trim();
     if (!trimmed) return;
@@ -109,7 +134,7 @@ export default function ChatPage() {
         <button className="min-h-[44px] rounded-xl bg-teal px-3 text-black" onClick={startVoiceInput}>
           {t("voice")}
         </button>
-        <button className="min-h-[44px] rounded-xl bg-gold px-3 text-black" onClick={() => startCall()}>
+        <button className="min-h-[44px] rounded-xl bg-gold px-3 text-black" onClick={handleVoiceCall}>
           {t("call")}
         </button>
         <button className="min-h-[44px] rounded-xl bg-rust px-3 text-black" onClick={() => endCall()}>

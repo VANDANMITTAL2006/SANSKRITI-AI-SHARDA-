@@ -39,6 +39,31 @@ export default function ChatPage() {
   const { toast, showToast, hideToast } = useToast()
   const { user } = useAuth()
 
+  const prepareVoiceCallForIOS = async () => {
+    const audioContextCtor = window.AudioContext || (window as Window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext
+    if (audioContextCtor) {
+      const audioContext = new audioContextCtor()
+      if (audioContext.state === 'suspended') {
+        await audioContext.resume()
+      }
+    }
+
+    if (navigator.mediaDevices?.getUserMedia) {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      stream.getTracks().forEach(track => track.stop())
+    }
+  }
+
+  const handleVoiceCall = async () => {
+    try {
+      await prepareVoiceCallForIOS()
+      await startCall(undefined, monumentId)
+    } catch (error) {
+      console.warn('[Vapi] iOS voice preflight failed:', error)
+      showToast(lang === 'hi' ? 'माइक्रोफोन अनुमति आवश्यक है।' : 'Microphone access is required to start the voice call.')
+    }
+  }
+
   // ── Robust Browser TTS ─────────────────────────────────
   const speakText = useCallback((text: string) => {
     if (!window.speechSynthesis) return
@@ -219,7 +244,7 @@ export default function ChatPage() {
             {/* Voice Call Button */}
             {!isCallActive ? (
               <button
-                onClick={() => startCall(undefined, monumentId)}
+                onClick={handleVoiceCall}
                 disabled={vapiLoading}
                 style={{
                   background: 'linear-gradient(135deg, #C9A84C, #D4893F)',
