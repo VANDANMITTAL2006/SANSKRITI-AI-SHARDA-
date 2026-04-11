@@ -134,6 +134,18 @@ export function useVapi(): UseVapiReturn {
     )
   }, [])
 
+  const getAssistantIdIssue = useCallback(() => {
+    const publicKey = process.env.NEXT_PUBLIC_VAPI_PUBLIC_KEY
+    const assistantId = process.env.NEXT_PUBLIC_VAPI_ASSISTANT_ID
+
+    if (isPlaceholderValue(assistantId)) return null
+    if (publicKey && assistantId?.trim() === publicKey.trim()) {
+      return 'NEXT_PUBLIC_VAPI_ASSISTANT_ID is the same as NEXT_PUBLIC_VAPI_PUBLIC_KEY. Set it to your actual Vapi assistant ID, not the public key.'
+    }
+
+    return null
+  }, [isPlaceholderValue])
+
   const enqueueVapiOperation = useCallback((operation: () => Promise<void>) => {
     const next = vapiOpQueueRef.current
       .catch(() => undefined)
@@ -260,10 +272,15 @@ ${currentLang === 'hi' ? 'CRITICAL: Respond entirely in Hindi. All facts, myths,
 
   const startWithFallback = useCallback(async (vapi: Vapi, zone: ZoneNarrationPayload) => {
     const staticAssistantId = process.env.NEXT_PUBLIC_VAPI_ASSISTANT_ID
+    const assistantIdIssue = getAssistantIdIssue()
     const transientAssistantBlockedMsg =
       'This Vapi key blocks transient assistants. Set NEXT_PUBLIC_VAPI_ASSISTANT_ID in .env.local.'
 
     const tryStartWithAssistantId = async () => {
+      if (assistantIdIssue) {
+        console.warn(assistantIdIssue)
+        return false
+      }
       if (isPlaceholderValue(staticAssistantId)) return false
       console.log('Starting VAPI with configured assistant ID fallback')
       await vapi.start(staticAssistantId!)
@@ -289,7 +306,7 @@ ${currentLang === 'hi' ? 'CRITICAL: Respond entirely in Hindi. All facts, myths,
       if (isTransientAssistantForbiddenError(primaryErr)) {
         const started = await tryStartWithAssistantId()
         if (started) return
-        throw new Error(transientAssistantBlockedMsg)
+        throw new Error(assistantIdIssue || transientAssistantBlockedMsg)
       }
       console.warn('Primary VAPI start failed:', extractVapiErrorMessage(primaryErr))
     }
@@ -308,13 +325,13 @@ ${currentLang === 'hi' ? 'CRITICAL: Respond entirely in Hindi. All facts, myths,
       if (isTransientAssistantForbiddenError(fallbackErr)) {
         const started = await tryStartWithAssistantId()
         if (started) return
-        throw new Error(transientAssistantBlockedMsg)
+        throw new Error(assistantIdIssue || transientAssistantBlockedMsg)
       }
       const finalError = formatUnknownError(fallbackErr)
       console.warn('Fallback VAPI start failed:', finalError)
       throw new Error(finalError || 'Voice start failed')
     }
-  }, [buildFallbackAssistantConfig, buildRuntimeAssistantConfig, isPlaceholderValue])
+  }, [buildFallbackAssistantConfig, buildRuntimeAssistantConfig, getAssistantIdIssue, isPlaceholderValue])
 
   const [isCallActive, setIsCallActive] = useState(false)
   const [isListening, setIsListening] = useState(false)
