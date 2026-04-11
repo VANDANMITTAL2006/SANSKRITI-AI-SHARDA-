@@ -21,21 +21,23 @@ export default function ChatPage() {
   const { startCall, endCall } = useVapi();
   const { t, lang } = useLang();
 
-  const ask = async () => {
-    if (!question.trim()) return;
+  const submitQuestion = async (rawQuestion: string) => {
+    const trimmed = rawQuestion.trim();
+    if (!trimmed) return;
     setLoading(true);
-    setMessages((m) => [...m, { role: "user", text: question }]);
+    setMessages((m) => [...m, { role: "user", text: trimmed }]);
 
-    const key = `${monumentId}:${question.trim().toLowerCase()}`;
+    const key = `${monumentId}:${trimmed.toLowerCase()}`;
     const hit = cache.get(key);
     if (hit && Date.now() - hit.ts < CACHE_MS) {
       setMessages((m) => [...m, { role: "assistant", text: hit.answer }]);
       setLoading(false);
+      setQuestion("");
       return;
     }
 
     try {
-      const res = await api.askChat(question, monumentId);
+      const res = await api.askChat(trimmed, monumentId);
       const answer = res.data?.answer ?? res.data?.text ?? "No response available.";
       cache.set(key, { ts: Date.now(), answer });
       setMessages((m) => [...m, { role: "assistant", text: answer }]);
@@ -46,6 +48,10 @@ export default function ChatPage() {
       setLoading(false);
       setQuestion("");
     }
+  };
+
+  const ask = () => {
+    void submitQuestion(question);
   };
 
   const startVoiceInput = () => {
@@ -78,6 +84,7 @@ export default function ChatPage() {
         .results;
       const transcript = results?.[0]?.[0]?.transcript ?? "";
       setQuestion(transcript);
+      void submitQuestion(transcript);
     };
     recognition.start();
   };
@@ -133,12 +140,20 @@ export default function ChatPage() {
 
       <div className="sticky bottom-[84px] mt-3 flex gap-2 rounded-2xl border border-white/10 bg-[#120d27]/90 p-2 backdrop-blur">
         <input
+          type="text"
           className="min-h-[48px] flex-1 rounded-xl bg-[var(--bg-card)] px-3"
           value={question}
           onChange={(e) => setQuestion(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              ask();
+            }
+          }}
           placeholder={t("askPlaceholder")}
         />
         <button
+          type="button"
           className="glow min-h-[48px] min-w-[110px] rounded-xl bg-gold font-semibold text-black"
           disabled={loading}
           onClick={ask}
